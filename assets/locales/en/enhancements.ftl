@@ -56,3 +56,5 @@ borderless = Borderless
 headless = Headless
 popup = Popup
 fullscreen = Fullscreen
+timestamp = Timestamp
+timestamp-description = Start the timestamp when the game launch.

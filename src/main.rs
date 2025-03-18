@@ -2,12 +2,16 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use relm4::prelude::*;
+use std::sync::{Arc, Mutex};
+
 
 use anime_launcher_sdk::config::ConfigExt;
 use anime_launcher_sdk::honkai::config::{Config, Schema};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anime_launcher_sdk::honkai::states::LauncherState;
 use anime_launcher_sdk::honkai::consts::*;
+use anime_launcher_sdk::discord_rpc::DiscordRpc;
 
 use anime_launcher_sdk::anime_game_core::prelude::*;
 use anime_launcher_sdk::anime_game_core::honkai::prelude::*;
@@ -43,6 +47,8 @@ pub fn is_ready() -> bool {
 }
 
 lazy_static::lazy_static! {
+    /// Discord RPC instance
+    pub static ref DISCORD_RPC_INSTANCE: Arc<Mutex<Option<DiscordRpc>>> = Arc::new(Mutex::new(None));
     /// Config loaded on the app's start. Use `Config::get()` to get up to date config instead.
     /// This one is used to prepare some launcher UI components on start
     pub static ref CONFIG: Schema = Config::get().expect("Failed to load config");
@@ -65,12 +71,12 @@ lazy_static::lazy_static! {
     pub static ref PROCESSED_BACKGROUND_FILE: PathBuf = CACHE_FOLDER.join("background");
 
     /// Path to `.keep-background` file. Used to mark launcher that it shouldn't update background picture
-    /// 
+    ///
     /// Standard is `$HOME/.local/share/honkers-launcher/.keep-background`
     pub static ref KEEP_BACKGROUND_FILE: PathBuf = LAUNCHER_FOLDER.join(".keep-background");
 
     /// Path to `.first-run` file. Used to mark launcher that it should run FirstRun window
-    /// 
+    ///
     /// Standard is `$HOME/.local/share/honkers-launcher/.first-run`
     pub static ref FIRST_RUN_FILE: PathBuf = LAUNCHER_FOLDER.join(".first-run");
 
@@ -106,6 +112,25 @@ lazy_static::lazy_static! {
 }
 
 fn main() -> anyhow::Result<()> {
+
+        // Initialize the configuration
+        if let Ok(mut config) = Config::get() {
+            // Set the start timestamp to the current time
+            let start_time = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs() as i64;
+            config.launcher.discord_rpc.start_timestamp = Some(start_time);
+
+            // Reset the end timestamp
+            config.launcher.discord_rpc.end_timestamp = None;
+
+            // Update the configuration
+            Config::update(config);
+        } else {
+            eprintln!("Failed to get config");
+        }
+
     // Setup custom panic handler
     human_panic::setup_panic!(human_panic::metadata!());
 
@@ -235,10 +260,10 @@ fn main() -> anyhow::Result<()> {
     else {
         // Temporary workaround for old patches which HAVE to be reverted
         // I don't believe to users to read announcements so better do this
-        // 
+        //
         // There's 2 files which were modified by the old patch, but since the game
         // was updated those files were updated as well, so no need for additional actions
-        // 
+        //
         // Should be removed in future
         let game_path = CONFIG.game.path.for_edition(CONFIG.launcher.edition);
 
